@@ -1,59 +1,59 @@
 #!/usr/bin/env bash
 # HostFlow AI Brain — Hetzner Deploy Script
-# Run this on fresh clone or to redeploy
+# Usage: ./deploy.sh
 set -e
 
-echo "=== HostFlow AI Brain — Deploy ==="
-echo ""
+echo "======================================="
+echo " HostFlow AI Brain — Deploy"
+echo "======================================="
 
-# ── Check Node version ──────────────────────────────────────────────────────
-NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
-if [ "$NODE_VERSION" -lt 20 ]; then
-  echo "❌ Node.js 20+ required. Install via: curl -fsSL https://deb.nodesource.com/setup_20.x | bash -"
+# 1. Check Node
+NODE_VER=$(node --version 2>/dev/null | sed 's/v//' | cut -d. -f1 || echo "0")
+if [ "$NODE_VER" -lt 18 ]; then
+  echo "ERROR: Node.js 18+ required. Current: $(node --version 2>/dev/null)"
+  echo "Install: curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs"
   exit 1
 fi
-echo "✅ Node.js $(node --version)"
+echo "Node.js $(node --version)"
 
-# ── Check pnpm ──────────────────────────────────────────────────────────────
-if ! command -v pnpm &> /dev/null; then
+# 2. Check/install pnpm
+if ! command -v pnpm &>/dev/null; then
   echo "Installing pnpm..."
-  npm install -g pnpm
+  npm install -g pnpm@10
 fi
-echo "✅ pnpm $(pnpm --version)"
+echo "pnpm $(pnpm --version)"
 
-# ── Check .env ──────────────────────────────────────────────────────────────
+# 3. Check .env
 if [ ! -f ".env" ]; then
   echo ""
-  echo "⚠️  No .env file found. Copying .env.example..."
+  echo "WARNING: No .env found. Copying .env.example ..."
   cp .env.example .env
-  echo "📝 Fill in /opt/hostflowai-brain/.env before running the server."
-  echo "   Required: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, DATABASE_URL, etc."
-  echo ""
+  echo "IMPORTANT: Edit .env with your real values before starting the server."
 fi
 
-# ── Install all workspace dependencies ──────────────────────────────────────
+# 4. Install all workspace deps (run from project root)
 echo ""
-echo "--- Installing dependencies..."
-pnpm install --frozen-lockfile=false
-echo "✅ Dependencies installed"
+echo "Installing dependencies..."
+pnpm install --no-frozen-lockfile
+echo "Dependencies installed."
 
-# ── Build the backend ────────────────────────────────────────────────────────
+# 5. Build backend
 echo ""
-echo "--- Building backend..."
+echo "Building backend..."
 cd backend
 node ./build.mjs
 cd ..
-echo "✅ Build complete → backend/dist/index.mjs"
+echo "Build complete: backend/dist/index.mjs"
 
-# ── Done ─────────────────────────────────────────────────────────────────────
+# 6. Done
 echo ""
-echo "=== Deploy complete! ==="
+echo "======================================="
+echo " Deploy complete!"
+echo "======================================="
 echo ""
-echo "To start the server:"
-echo "  cd /opt/hostflowai-brain"
+echo "Start server:"
 echo "  node --enable-source-maps ./backend/dist/index.mjs"
 echo ""
-echo "To run with PM2 (recommended for production):"
-echo "  pm2 start ./backend/dist/index.mjs --name hostflowai-brain --interpreter node"
-echo "  pm2 save"
-echo "  pm2 startup"
+echo "Or with PM2:"
+echo "  pm2 start ./backend/dist/index.mjs --name hostflowai-brain"
+echo "  pm2 save && pm2 startup"
