@@ -2,12 +2,11 @@
   "name": "hostflowai-brain",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "build": "cd backend && node ./build.mjs",
-    "start": "node --enable-source-maps ./backend/dist/index.mjs",
-    "deploy": "bash ./deploy.sh"
+    "start": "node --enable-source-maps ./backend/dist/index.mjs"
   }
 }
