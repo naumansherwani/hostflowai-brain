@@ -1,14 +1,4 @@
-# HostFlow AI Brain — pnpm workspace (Hetzner server layout)
-# Folder structure on Hetzner:
-#   backend/   ← API server (was artifacts/api-server in Replit)
-#   db/        ← Drizzle ORM schema + migrations (was lib/db in Replit)
-
+# HostFlow AI Brain — pnpm workspace (Hetzner server)
 packages:
   - backend
-  - db
-
-# Security: require packages to be published for at least 1 day
-minimumReleaseAge: 1440
-
-onlyBuiltDependencies:
-  - esbuild
+  - libs/*
