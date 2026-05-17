@@ -1,10 +1,72 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { randomUUID } from "crypto";
-import { sovereignAuth, callJimmyAI } from "../lib/jimmy-ai-core.js";
+import { sovereignAuth, callJimmyAI, checkOllamaHealth, getAvailableProviders } from "../lib/jimmy-ai-core.js";
 
 const router: IRouter = Router();
 
 const auth = (req: Request, res: Response, next: () => void) => sovereignAuth(req, res, next);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// JIMMY STATUS — One key, all endpoints visible
+// GET /api/founder/jimmy/status
+// Set FOUNDER_SECRET_KEY → all endpoints auto-activate
+// ─────────────────────────────────────────────────────────────────────────────
+const JIMMY_ENDPOINTS = [
+  { phase: 1,  path: "POST /api/founder/jimmy/orchestrate",        name: "Sovereign Orchestrator",    status: "live" },
+  { phase: 2,  path: "POST /api/founder/jimmy/strategic-brain",    name: "Founder Strategic Brain",   status: "live" },
+  { phase: 6,  path: "POST /api/founder/jimmy/code",               name: "Autonomous Coding Engine",  status: "live" },
+  { phase: 7,  path: "POST /api/founder/jimmy/build-ui",           name: "Frontend Builder",          status: "live" },
+  { phase: 8,  path: "POST /api/founder/jimmy/devops",             name: "DevOps Autopilot",          status: "live" },
+  { phase: 10, path: "POST /api/founder/jimmy/market-intel",       name: "Market Intelligence",       status: "live" },
+  { phase: 11, path: "POST /api/founder/jimmy/social-media",       name: "Social Media Automation",   status: "live" },
+  { phase: 12, path: "POST /api/founder/jimmy/sales",              name: "Sales Copilot",             status: "live" },
+  { phase: 13, path: "POST /api/founder/jimmy/finance",            name: "Finance Copilot",           status: "live" },
+  { phase: 14, path: "POST /api/founder/jimmy/product",            name: "Product Manager AI",        status: "live" },
+  { phase: 15, path: "POST /api/founder/jimmy/legal",              name: "Legal & Compliance",        status: "live" },
+  { phase: 17, path: "POST /api/founder/jimmy/orchestrate-agents", name: "Agent Orchestrator",        status: "live" },
+  { phase: 18, path: "POST /api/founder/jimmy/self-improve",       name: "Self-Improvement Engine",   status: "live" },
+  { phase: 20, path: "POST /api/founder/jimmy/operate",            name: "Autonomous Operator",       status: "live" },
+  { phase: 4,  path: "POST /api/founder/jimmy/memory",             name: "Long-Term Memory",          status: "pending_supabase" },
+  { phase: 19, path: "POST /api/founder/jimmy/dashboard-intel",    name: "Executive Dashboard Intel", status: "pending_supabase" },
+];
+
+router.get("/founder/jimmy/status", auth, async (req: Request, res: Response): Promise<void> => {
+  const audit_id = randomUUID();
+  const [ollama] = await Promise.all([checkOllamaHealth()]);
+  const providers = getAvailableProviders();
+  const liveEndpoints = JIMMY_ENDPOINTS.filter(e => e.status === "live");
+  const pendingEndpoints = JIMMY_ENDPOINTS.filter(e => e.status !== "live");
+
+  res.json({
+    success: true,
+    audit_id,
+    jimmy: {
+      identity: "Jimmy — Sovereign Founder AI of HostFlow AI",
+      version: "2.0.0",
+      key_status: "AUTHENTICATED",
+      message: "All endpoints are active. One key unlocks everything.",
+    },
+    ai_engine: {
+      primary: "ollama",
+      model: process.env["JIMMY_MODEL"] ?? "qwen3:8b",
+      ollama_healthy: ollama.ok,
+      ollama_url: ollama.url,
+      ollama_model: ollama.model,
+      available_providers: providers,
+    },
+    endpoints: {
+      total: JIMMY_ENDPOINTS.length,
+      live: liveEndpoints.length,
+      pending_supabase: pendingEndpoints.length,
+      live_list: liveEndpoints,
+      pending_list: pendingEndpoints,
+    },
+    how_to_call: {
+      header: "X-Sovereign-Token: <your FOUNDER_SECRET_KEY>",
+      example: `curl -X POST https://your-server/api/founder/jimmy/strategic-brain -H "X-Sovereign-Token: YOUR_KEY" -H "Content-Type: application/json" -d '{"topic":"HostFlow AI growth strategy"}'`,
+    },
+  });
+});
 
 function baseResponse(phase: number, phaseName: string) {
   return { audit_id: randomUUID(), phase, phase_name: phaseName };
