@@ -7,9 +7,9 @@ import { randomUUID } from "crypto";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function sovereignAuth(req: Request, res: Response, next: () => void): void {
-  const token = req.headers["x-sovereign-token"];
-  const expected = process.env["FOUNDER_SECRET_KEY"];
-  if (!expected || token !== expected) {
+  const provided = (req.headers["x-sovereign-token"] ?? "").toString().trim();
+  const expected = (process.env["FOUNDER_SECRET_KEY"] ?? "").trim();
+  if (!expected || provided !== expected) {
     res.status(401).json({
       success: false,
       error: "Unauthorized: invalid sovereign token",
