@@ -26,8 +26,8 @@ const JIMMY_ENDPOINTS = [
   { phase: 17, path: "POST /api/founder/jimmy/orchestrate-agents", name: "Agent Orchestrator",        status: "live" },
   { phase: 18, path: "POST /api/founder/jimmy/self-improve",       name: "Self-Improvement Engine",   status: "live" },
   { phase: 20, path: "POST /api/founder/jimmy/operate",            name: "Autonomous Operator",       status: "live" },
-  { phase: 4,  path: "POST /api/founder/jimmy/memory",             name: "Long-Term Memory",          status: "pending_supabase" },
-  { phase: 19, path: "POST /api/founder/jimmy/dashboard-intel",    name: "Executive Dashboard Intel", status: "pending_supabase" },
+  { phase: 4,  path: "POST /api/founder/jimmy/memory",             name: "Long-Term Memory",          status: "live" },
+  { phase: 19, path: "POST /api/founder/jimmy/dashboard-intel",    name: "Executive Dashboard Intel", status: "live" },
 ];
 
 router.get("/founder/jimmy/status", auth, async (req: Request, res: Response): Promise<void> => {
@@ -726,6 +726,159 @@ Plan and execute this operation. Return JSON:
     let parsed: unknown = response;
     try { parsed = JSON.parse(response.match(/\{[\s\S]*\}/)?.[0] ?? response); } catch { /* raw fallback */ }
     res.json({ success: true, operation: parsed, approved: true, provider, ...meta });
+  } catch (e) {
+    res.status(500).json({ success: false, error: (e as Error).message, ...meta });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 4 — Long-Term Memory
+// POST /api/founder/jimmy/memory
+// action: "save" | "recall" | "summarize" | "clear_session"
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/founder/jimmy/memory", auth, async (req: Request, res: Response): Promise<void> => {
+  const audit_id = randomUUID();
+  const meta = { audit_id, phase: 4, endpoint: "memory", timestamp: new Date().toISOString() };
+  const { action = "recall", content, tags = [], session_id, limit: queryLimit = 20 } = req.body as {
+    action?: string; content?: string; tags?: string[]; session_id?: string; limit?: number;
+  };
+
+  const supabaseUrl = process.env["SUPABASE_URL"];
+  const supabaseKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+
+  if (!supabaseUrl || !supabaseKey) {
+    res.status(503).json({ success: false, error: "Supabase not configured", ...meta });
+    return;
+  }
+
+  const headers = { "Content-Type": "application/json", "apikey": supabaseKey, "Authorization": `Bearer ${supabaseKey}` };
+  const dbUrl = `${supabaseUrl}/rest/v1`;
+
+  try {
+    if (action === "save") {
+      if (!content) { res.status(400).json({ success: false, error: "content required for save", ...meta }); return; }
+      const body = JSON.stringify({ content, tags, session_id: session_id ?? "default", created_at: new Date().toISOString() });
+      const r = await fetch(`${dbUrl}/jimmy_long_term_memory`, { method: "POST", headers: { ...headers, "Prefer": "return=representation" }, body });
+      const saved = await r.json();
+      res.json({ success: true, action: "saved", record: saved, ...meta });
+
+    } else if (action === "recall") {
+      const url = new URL(`${dbUrl}/jimmy_long_term_memory`);
+      url.searchParams.set("order", "created_at.desc");
+      url.searchParams.set("limit", String(queryLimit));
+      if (session_id) url.searchParams.set("session_id", `eq.${session_id}`);
+      const r = await fetch(url.toString(), { headers });
+      const memories = await r.json() as unknown[];
+      const memText = (memories as Array<{ content?: string; created_at?: string; tags?: string[] }>)
+        .map((m, i) => `[${i + 1}] ${m.content} (${m.created_at?.slice(0, 10)})`)
+        .join("\n");
+
+      const system = `You are Jimmy, Sovereign AI of HostFlow AI. You have access to the founder's stored memories and past context. Analyze and synthesize them.`;
+      const prompt = content
+        ? `Based on these memories:\n${memText}\n\nAnswer: ${content}`
+        : `Summarize the most important insights from these memories:\n${memText}`;
+
+      const { response, provider } = await callJimmyAI(prompt, system, false);
+      res.json({ success: true, action: "recalled", memories_count: memories.length, synthesis: response, raw_memories: memories, provider, ...meta });
+
+    } else if (action === "summarize") {
+      const r = await fetch(`${dbUrl}/jimmy_long_term_memory?order=created_at.desc&limit=100`, { headers });
+      const memories = await r.json() as Array<{ content?: string; created_at?: string }>;
+      const memText = memories.map((m, i) => `[${i + 1}] ${m.content}`).join("\n");
+      const system = `You are Jimmy. Create a powerful executive summary of all stored context.`;
+      const { response, provider } = await callJimmyAI(`Summarize all memories:\n${memText}`, system, false);
+      res.json({ success: true, action: "summarized", total_memories: memories.length, summary: response, provider, ...meta });
+
+    } else if (action === "clear_session") {
+      if (!session_id) { res.status(400).json({ success: false, error: "session_id required", ...meta }); return; }
+      await fetch(`${dbUrl}/jimmy_long_term_memory?session_id=eq.${session_id}`, { method: "DELETE", headers });
+      res.json({ success: true, action: "cleared", session_id, ...meta });
+
+    } else {
+      res.status(400).json({ success: false, error: `Unknown action: ${action}. Use: save|recall|summarize|clear_session`, ...meta });
+    }
+  } catch (e) {
+    res.status(500).json({ success: false, error: (e as Error).message, ...meta });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 19 — Executive Dashboard Intelligence
+// POST /api/founder/jimmy/dashboard-intel
+// mode: "full" | "users" | "revenue" | "ai_usage" | "alerts"
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/founder/jimmy/dashboard-intel", auth, async (req: Request, res: Response): Promise<void> => {
+  const audit_id = randomUUID();
+  const meta = { audit_id, phase: 19, endpoint: "dashboard-intel", timestamp: new Date().toISOString() };
+  const { mode = "full", question, date_from, date_to } = req.body as {
+    mode?: string; question?: string; date_from?: string; date_to?: string;
+  };
+
+  const supabaseUrl = process.env["SUPABASE_URL"];
+  const supabaseKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+
+  if (!supabaseUrl || !supabaseKey) {
+    res.status(503).json({ success: false, error: "Supabase not configured", ...meta });
+    return;
+  }
+
+  const headers = { "Content-Type": "application/json", "apikey": supabaseKey, "Authorization": `Bearer ${supabaseKey}` };
+  const dbUrl = `${supabaseUrl}/rest/v1`;
+
+  try {
+    const dateFilter = date_from ? `&created_at=gte.${date_from}` : "";
+
+    // Fetch metrics in parallel
+    const [usersRes, subRes, aiUsageRes, plansRes] = await Promise.all([
+      fetch(`${dbUrl}/profiles?select=id,plan,industry,created_at&order=created_at.desc&limit=500${dateFilter}`, { headers }),
+      fetch(`${dbUrl}/subscriptions?select=*&order=created_at.desc&limit=200${dateFilter}`, { headers }),
+      fetch(`${dbUrl}/ai_usage_log?select=user_id,tokens_used,created_at&order=created_at.desc&limit=1000${dateFilter}`, { headers }),
+      fetch(`${dbUrl}/plan_limits?select=*`, { headers }),
+    ]);
+
+    const [users, subscriptions, aiUsage, plans] = await Promise.all([
+      usersRes.json() as Promise<Array<{ id: string; plan?: string; industry?: string; created_at?: string }>>,
+      subRes.json() as Promise<Array<{ id: string; plan?: string; status?: string; amount?: number }>>,
+      aiUsageRes.json() as Promise<Array<{ user_id?: string; tokens_used?: number }>>,
+      plansRes.json() as Promise<Array<{ plan?: string; price?: number }>>,
+    ]);
+
+    // Compute metrics
+    const totalUsers = Array.isArray(users) ? users.length : 0;
+    const byPlan = Array.isArray(users) ? users.reduce((acc: Record<string, number>, u) => { acc[u.plan ?? "free"] = (acc[u.plan ?? "free"] ?? 0) + 1; return acc; }, {}) : {};
+    const byIndustry = Array.isArray(users) ? users.reduce((acc: Record<string, number>, u) => { acc[u.industry ?? "unknown"] = (acc[u.industry ?? "unknown"] ?? 0) + 1; return acc; }, {}) : {};
+    const activeSubscriptions = Array.isArray(subscriptions) ? subscriptions.filter((s) => s.status === "active").length : 0;
+    const totalRevenue = Array.isArray(subscriptions) ? subscriptions.filter((s) => s.status === "active").reduce((sum, s) => sum + (s.amount ?? 0), 0) : 0;
+    const totalTokens = Array.isArray(aiUsage) ? aiUsage.reduce((sum, a) => sum + (a.tokens_used ?? 0), 0) : 0;
+
+    const dashboardData = {
+      users: { total: totalUsers, by_plan: byPlan, by_industry: byIndustry },
+      revenue: { active_subscriptions: activeSubscriptions, estimated_mrr: totalRevenue },
+      ai_usage: { total_tokens: totalTokens, total_calls: Array.isArray(aiUsage) ? aiUsage.length : 0 },
+      plans: Array.isArray(plans) ? plans : [],
+    };
+
+    if (mode !== "full" && mode !== "ai_usage" && mode !== "alerts") {
+      res.json({ success: true, mode, data: dashboardData[mode as keyof typeof dashboardData] ?? dashboardData, ...meta });
+      return;
+    }
+
+    // AI analysis
+    const systemPrompt = `You are Jimmy, Sovereign Founder AI of HostFlow AI. Analyze these real business metrics and give the founder sharp, actionable intelligence. Be direct. Identify risks, opportunities, and exact next steps.`;
+    const analysisPrompt = question
+      ? `Business metrics:\n${JSON.stringify(dashboardData, null, 2)}\n\nFounder question: ${question}`
+      : `Analyze these HostFlow AI business metrics and give me:\n1. Key wins\n2. Critical risks\n3. Top 3 immediate actions\n4. Revenue growth opportunities\n\nData:\n${JSON.stringify(dashboardData, null, 2)}`;
+
+    const { response, provider } = await callJimmyAI(analysisPrompt, systemPrompt, false);
+
+    res.json({
+      success: true,
+      mode,
+      metrics: dashboardData,
+      jimmy_analysis: response,
+      provider,
+      ...meta,
+    });
   } catch (e) {
     res.status(500).json({ success: false, error: (e as Error).message, ...meta });
   }
