@@ -154,38 +154,61 @@ You think strategically, act decisively, and respond with structured clarity. Yo
       let response = "";
       let provider = "ollama";
 
-      if (use_burst) {
-        const geminiKey = process.env["GEMINI_API_KEY"];
-        const groqKey = process.env["GROQ_API_KEY"];
+      const geminiKey = process.env["GEMINI_API_KEY"];
+      const groqKey = process.env["GROQ_API_KEY"];
 
-        if (geminiKey) {
+      if (use_burst && geminiKey) {
+        // Burst mode: Gemini first (fastest, smartest)
+        try {
+          response = await callGemini(message.trim(), systemPrompt);
+          provider = "gemini";
+        } catch {
           try {
-            response = await callGemini(message.trim(), systemPrompt);
-            provider = "gemini";
-          } catch {
             if (groqKey) {
               response = await callGroq(message.trim(), systemPrompt);
               provider = "groq";
             } else {
               response = await callOllama(message.trim(), systemPrompt);
-              provider = "ollama-fallback";
+              provider = "ollama";
             }
-          }
-        } else if (groqKey) {
-          try {
-            response = await callGroq(message.trim(), systemPrompt);
-            provider = "groq";
           } catch {
-            response = await callOllama(message.trim(), systemPrompt);
-            provider = "ollama-fallback";
+            throw new Error("All burst providers failed");
           }
-        } else {
+        }
+      } else if (use_burst && groqKey) {
+        try {
+          response = await callGroq(message.trim(), systemPrompt);
+          provider = "groq";
+        } catch {
           response = await callOllama(message.trim(), systemPrompt);
           provider = "ollama";
         }
       } else {
-        response = await callOllama(message.trim(), systemPrompt);
-        provider = "ollama";
+        // Default: try Ollama first, auto-fallback to Gemini → Groq
+        try {
+          response = await callOllama(message.trim(), systemPrompt);
+          provider = "ollama";
+        } catch {
+          // Ollama not available — auto-fallback
+          if (geminiKey) {
+            try {
+              response = await callGemini(message.trim(), systemPrompt);
+              provider = "gemini-fallback";
+            } catch {
+              if (groqKey) {
+                response = await callGroq(message.trim(), systemPrompt);
+                provider = "groq-fallback";
+              } else {
+                throw new Error("Ollama unavailable and no API keys configured (GEMINI_API_KEY / GROQ_API_KEY)");
+              }
+            }
+          } else if (groqKey) {
+            response = await callGroq(message.trim(), systemPrompt);
+            provider = "groq-fallback";
+          } else {
+            throw new Error("Ollama unavailable and no API keys configured (GEMINI_API_KEY / GROQ_API_KEY)");
+          }
+        }
       }
 
       res.json({
