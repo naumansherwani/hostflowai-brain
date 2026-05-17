@@ -26,6 +26,7 @@ import pricingRouter from "./pricing.js";
 import calendarRouter from "./calendar.js";
 import otaConnectionsRouter from "./ota-connections.js";
 import jimmyRouter from "./jimmy.js";
+import jimmyAdvancedRouter from "./jimmy-advanced.js";
 
 const router: IRouter = Router();
 
@@ -56,5 +57,6 @@ router.use(calendarRouter);
 router.use(otaConnectionsRouter);
 router.use("/v1", v1Router);
 router.use(jimmyRouter);
+router.use(jimmyAdvancedRouter);
 
 export default router;
